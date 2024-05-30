@@ -40,7 +40,7 @@ def main(opt):
     opt.B_col = data.dataset.B_data.shape[1]
     label_t_cn = np.loadtxt(opt.label, dtype='int32', delimiter=',')
     unique_K, counts_K = np.unique(label_t_cn, return_counts=True)
-    opt.batch_size = data_A_size
+    batch_size = data_A_size
     K_cluster = len(unique_K)
 
     model = Create_Model(opt) # Create Model
@@ -57,7 +57,7 @@ def main(opt):
     for epoch in tqdm(range(opt.epochs)): # Iteration Start
         data_train = copy.deepcopy(data_bk)
 
-        for step, x in xs_gen(data_train, opt.batch_size, 1):
+        for step, x in xs_gen(data_train, batch_size, 1):
             if epoch % 1 == 0:
                 epochs.append(epoch)
             real_A = x['A'].to(device)
@@ -83,7 +83,7 @@ def main(opt):
     a = []
     data_eval = copy.deepcopy(data_bk)
     model.eval()
-    for step, x in xs_gen(data_eval, opt.batch_size, 0):
+    for step, x in xs_gen(data_eval, batch_size, 0):
         real_A_eval  = x['A'].to(device)
         real_B_eval = x['B'].to(device)
         real_A_eval = real_A_eval.unsqueeze(1)

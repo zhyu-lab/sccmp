@@ -72,7 +72,6 @@ The cell-to-cluster assignments are written to a file with name "labels.txt".
 Parameter | Description | Possible values
 ---- | ----- | ------
 --epochs | number of epoches to train the scCNM | Ex: epochs=100  default:30
---batch_size | batch size | Ex: batch_size=128  default:Number of samples in the copy number dataset
 --lr | learning rate | Ex: lr=0.0001  default:0.0006
 --latent_dim | latent dimension | Ex: latent_dim=3  default:10
 --kernel_size | latent dimension | Ex: latent_dim=5  default:7
