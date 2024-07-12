@@ -43,7 +43,8 @@ scCNM uses single-cell copy number and point mutation data to aggregate tumor ce
 Example:
 
 ```
-python run_scCNM.py --gpu 0 --cnv ./data/real/A/CHISEL_A_CN.txt --snv ./data/real/A/CHISEL_A_SNV.txt --label ./data/real/A/A_label.txt --output ./data
+tar -zxvf data/real/A.tar.gz
+python run_scCNM.py --gpu 0 --cnv ./A/A_CN.txt --snv ./A/A_SNV.txt --label ./A/A_label.txt --output ./data
 ```
 
 ## Input Files
