@@ -4,16 +4,19 @@ import torch
 import copy
 import numpy as np
 import warnings
+
+from sklearn.cluster import KMeans
 from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import normalized_mutual_info_score
-from scCNM_model import Create_Model, ce_loss, rec_loss
-from data.data_process import xs_gen
+from collections import Counter
+
+from networks import scCNM, ce_loss_weighted, mse_loss
+from graph_function import create_edge_index
 from data import create_dataset
-from sklearn.cluster import KMeans
-from tqdm import tqdm
 import random
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # Used to specify which device to use to run the PyTorch model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def setup_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -25,104 +28,113 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def main(opt):
-    setup_seed(opt.seed)
+
+def main(args):
+    setup_seed(args.seed)
+    if device.type == "cuda":
+        torch.cuda.set_device(args.gpu)
     start_t = datetime.datetime.now()  # Get current time
 
-    data = create_dataset(opt)            # Create dataset
+    output_dir = args.output
+    if not os.path.isdir(output_dir):
+        os.mkdir(args.output)
 
-    data_bk = copy.deepcopy(data)
-    data_A_size = data.dataset.A_data.shape[0]
-    data_B_size = data.dataset.B_data.shape[0]
-    print('A的大小：', data_A_size)
-    print('B的大小：', data_B_size)
-    opt.A_col = data.dataset.A_data.shape[1]
-    opt.B_col = data.dataset.B_data.shape[1]
-    label_t_cn = np.loadtxt(opt.label, dtype='int32', delimiter=',')
-    unique_K, counts_K = np.unique(label_t_cn, return_counts=True)
-    batch_size = data_A_size
-    K_cluster = len(unique_K)
+    data = create_dataset(args)            # Create dataset
 
-    model = Create_Model(opt) # Create Model
-    optimizer_model = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.98))
+    data_cn_size = data.dataset.A_data.shape[0]
+    data_snv_size = data.dataset.B_data.shape[0]
+    dim_cn = data.dataset.A_data.shape[1]
+    dim_snv = data.dataset.B_data.shape[1]
+    assert data_cn_size == data_snv_size
+    print('size of CN data：', data.dataset.A_data.shape)
+    print('size of SNV data：', data.dataset.B_data.shape)
 
+    tmp = data.dataset.B_data.data.cpu().numpy()
+    sparsity_ratio = np.sum(tmp < 0.5) / data_snv_size / dim_snv
+    print('sparsity of SNV data：', sparsity_ratio)
+
+    e, A = create_edge_index(data.dataset.A_data, args.neighbors)
+    e = torch.from_numpy(e).to(device)
+
+    label_t = np.loadtxt(args.label, dtype='int32', delimiter=',')
+    u_ids, u_counts = np.unique(label_t, return_counts=True)
+    num_cluster = len(u_ids)
+
+    model = scCNM(dim_cn, dim_snv, args.latent_dim).to(device)  # Create scCNM Model
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98))
+
+    train_loss_cn = []
+    train_loss_snv = []
+    train_loss = []
     epochs = []
-    train_loss_rec_A = []
-    train_loss_rec_B = []
 
     # Start training the model
     model.train()
 
-    print("Iteration Start:")
-    for epoch in tqdm(range(opt.epochs)): # Iteration Start
-        data_train = copy.deepcopy(data_bk)
+    print("Model training start:")
+    for epoch in range(args.epochs):
+        epochs.append(epoch+1)
+        data_train = copy.deepcopy(data)
 
-        for step, x in xs_gen(data_train, batch_size, 1):
-            if epoch % 1 == 0:
-                epochs.append(epoch)
-            real_A = x['A'].to(device)
-            real_B = x['B'].to(device)
-            real_A = real_A.unsqueeze(1)
-            dna_enc, rna_enc, h_enc, rec_DNA, p_SNV = model(real_A, real_B)
-            real_A = real_A.squeeze()
+        data_cn = data_train.dataset.A_data.to(device)
+        data_snv = data_train.dataset.B_data.to(device)
+        data_cn = data_cn.unsqueeze(1)
+        enc_cn, enc_snv, h_enc, rec_cn, rec_snv, rec_A = model(data_cn, data_snv, e)
+        data_cn = data_cn.squeeze()
 
-            optimizer_model.zero_grad()  # set model's gradients to zero
+        optimizer.zero_grad()  # set model's gradients to zero
 
-            loss_rec_A = rec_loss(rec_DNA, real_A)
-            loss_rec_B = ce_loss(p_SNV, real_B)
+        loss_rec_cn = mse_loss(rec_cn, data_cn)
+        loss_rec_snv = ce_loss_weighted(rec_snv, data_snv, args.w)
 
-            loss_model = loss_rec_A + loss_rec_B
-            loss_model.backward()   # calculate gradients for model
-            optimizer_model.step()
+        loss = loss_rec_cn + loss_rec_snv
+        loss.backward()   # calculate gradients for model
+        optimizer.step()
 
-            if epoch % 1 ==0:
-                train_loss_rec_A.append(loss_rec_A.data.cpu().numpy())
-                train_loss_rec_B.append(loss_rec_B.data.cpu().numpy())
+        train_loss_cn.append(loss_rec_cn.data.cpu().numpy())
+        train_loss_snv.append(loss_rec_snv.data.cpu().numpy())
+        train_loss.append(loss.data.cpu().numpy())
+        print("epoch: " + str(epoch) + ", cn loss:" + str(loss_rec_cn.data.cpu().numpy()) +
+              ", snv loss:" + str(loss_rec_snv.data.cpu().numpy()) +
+              ", total loss:" + str(loss.data.cpu().numpy()))
 
-    # get latent representation of single cells after scCNM training is completed
-    a = []
-    data_eval = copy.deepcopy(data_bk)
+    np.savetxt(output_dir + '/loss_cn.txt', np.c_[np.reshape(train_loss_cn, (1, len(train_loss_cn)))], fmt='%f', delimiter=',')
+    np.savetxt(output_dir + '/loss_snv.txt', np.c_[np.reshape(train_loss_snv, (1, len(train_loss_snv)))], fmt='%f', delimiter=',')
+    np.savetxt(output_dir + '/loss_total.txt', np.c_[np.reshape(train_loss, (1, len(train_loss)))], fmt='%f', delimiter=',')
+
+    # get latent representation of single cells
+    latent_features = []
+    data_eval = copy.deepcopy(data)
     model.eval()
-    for step, x in xs_gen(data_eval, batch_size, 0):
-        real_A_eval  = x['A'].to(device)
-        real_B_eval = x['B'].to(device)
-        real_A_eval = real_A_eval.unsqueeze(1)
-        with torch.no_grad():
-            d1, d2, h_enc, rec_DNA, p_SNV = model(real_A_eval, real_B_eval)
-            z = h_enc.cpu().detach().numpy()
-            a.append(z)
+    data_cn = data_eval.dataset.A_data.to(device)
+    data_snv = data_eval.dataset.B_data.to(device)
+    data_cn = data_cn.unsqueeze(1)
+    with torch.no_grad():
+        enc_cn, enc_snv, h_enc, rec_cn, rec_snv, rec_A = model(data_cn, data_snv, e)
+        latent_features = h_enc.cpu().detach().numpy()
+        rec_snv = rec_snv.cpu().detach().numpy()
 
-    for id, mu in enumerate(a):
-        if id == 0:
-            features = mu
-        else:
-            features = np.r_[features, mu]
+    latent_features = np.array(latent_features)
+    np.savetxt(output_dir + '/latent.txt', latent_features, fmt='%.3f', delimiter=',')  # Save latents to file
+    print("latent features saved successfully")
+    rec_snv = np.array(rec_snv)
+    np.savetxt(output_dir + '/rec-snv.txt', rec_snv, fmt='%.3f', delimiter=',')  # Save reconstructed snv data to file
+    print("reconstructed snv data saved successfully")
 
-    print("scCNM:")
-    features_array = np.array(features)
-    np.savetxt('./results/latent.txt', features_array,fmt='%.6f', delimiter=',') # Save features to TXT file
-    print("latent.txt saved successfully")
-    # use Gaussian mixture model to cluster the single cells
+    # use k-means to cluster the single cells
     print('clustering the cells...')
-
     warnings.simplefilter(action='ignore', category=FutureWarning)
-    print("cluster =============")
-    kmeans = KMeans(n_clusters=K_cluster, random_state=100)
-    label_pred = kmeans.fit_predict(features)
-    K_means_ARI = adjusted_rand_score(label_t_cn, label_pred)
-    K_means_NMI = normalized_mutual_info_score(label_t_cn, label_pred)
+    kmeans = KMeans(n_clusters=num_cluster, n_init=100)
+    label_p = kmeans.fit_predict(latent_features)
+    print(Counter(label_p))
 
-    label_p_array = np.array(label_pred)
-    label_p_array = label_p_array.reshape(1, -1)
-    np.savetxt('./results/label.txt', label_p_array, fmt='%d',delimiter=',')  #Save label_p to TXT file
-    print("label.txt saved successfully")
-    print("cluster successfully")
-    print("Performance Indicator：")
-    print('cluster_num:', K_cluster, 'ARI: ', round(K_means_ARI, 6),'NMI: ', round(K_means_NMI, 6))
+    ari = adjusted_rand_score(label_t, label_p)
+    nmi = normalized_mutual_info_score(label_t, label_p)
+    print('cluster_num:', num_cluster, 'ARI: ', round(ari, 6), 'NMI: ', round(nmi, 6))
 
+    label_p = np.array(label_p).reshape(1, -1)
+    np.savetxt(output_dir + '/label.txt', label_p, fmt='%d', delimiter=',')  # Save labels to file
+    print("cell labels saved successfully")
 
     end_t = datetime.datetime.now()
     print('elapsed time: ', (end_t - start_t).seconds)
-
-
-

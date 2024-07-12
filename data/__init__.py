@@ -22,7 +22,6 @@ class CustomDatasetDataLoader():
 
         self.dataset.A_data = torch.from_numpy(self.dataset.A_data)
         self.dataset.B_data = torch.from_numpy(self.dataset.B_data)
-        print("dataset [%s] was created" % type(self.dataset).__name__)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             )
