@@ -409,7 +409,7 @@ def ce_loss(predict, target):
 
 
 def ce_loss_weighted(predict, target, w):
-    tmp = w * target * torch.log(predict) + (1-target) * torch.log(1-predict)
+    tmp = w * target * torch.log(predict+1e-10) + (1-target) * torch.log(1-predict+1e-10)
     return -torch.mean(tmp)
 
 
