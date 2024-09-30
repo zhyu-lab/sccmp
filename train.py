@@ -10,7 +10,7 @@ from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import normalized_mutual_info_score
 from collections import Counter
 
-from networks import scCNM, ce_loss_weighted, mse_loss
+from networks import scCMP, ce_loss_weighted, mse_loss
 from graph_function import create_edge_index
 from data import create_dataset
 import random
@@ -60,7 +60,7 @@ def main(args):
     u_ids, u_counts = np.unique(label_t, return_counts=True)
     num_cluster = len(u_ids)
 
-    model = scCNM(dim_cn, dim_snv, args.latent_dim).to(device)  # Create scCNM Model
+    model = scCMP(dim_cn, dim_snv, args.latent_dim).to(device)  # Create scCMP Model
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98))
 
     train_loss_cn = []

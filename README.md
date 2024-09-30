@@ -1,6 +1,6 @@
-# scCNM
+# scCMP
 
-scCNM is a deep joint representation learning framework. The backbone of scCNM is a dual autoencoder that jointly processes single-cell copy number and point mutation data. It fuses individual and commonality information among the two data modalities of the cells to identify cell subpopulations and clonal mutation patterns.
+scCMP is a deep joint representation learning framework. The backbone of scCMP is a dual autoencoder that jointly processes single-cell copy number and point mutation data. It fuses individual and commonality information among the two data modalities of the cells to identify cell subpopulations and clonal mutation patterns.
 
 
 
@@ -10,21 +10,21 @@ scCNM is a deep joint representation learning framework. The backbone of scCNM i
 
 # Installation
 ## Clone repository
-First, download scCNM from github and change to the directory:
+First, download scCMP from github and change to the directory:
 ```bash
-git clone https://github.com/zhyu-lab/sccnm
-cd sccnm
+git clone https://github.com/zhyu-lab/sccmp
+cd sccmp
 ```
 
 ## Create conda environment (optional)
-Create a new environment named "sccnm":
+Create a new environment named "sccmp":
 ```bash
-conda create --name sccnm python=3.9.16
+conda create --name sccmp python=3.9.16
 ```
 
 Then activate it:
 ```bash
-conda activate sccnm
+conda activate sccmp
 ```
 
 ## Install requirements
@@ -34,17 +34,17 @@ python -m pip install -r requirements.txt
 pip install torch_geometric einops timm
 ```
 
-Now you are ready to run **scCNM**!
+Now you are ready to run **scCMP**!
 
 ## Usage
 
-scCNM uses single-cell copy number and point mutation data to aggregate tumor cells into distinct subpopulations.
+scCMP uses single-cell copy number and point mutation data to aggregate tumor cells into distinct subpopulations.
 
 Example:
 
 ```
 tar -zxvf data/real/A.tar.gz
-python run_scCNM.py --gpu 0 --cnv ./A/A_CN.txt --snv ./A/A_SNV.txt --label ./A/A_label.txt --output ./data
+python run_scCMP.py --gpu 0 --w 1000 --cnv ./A/A_CN.txt --snv ./A/A_SNV.txt --label ./A/A_label.txt --output ./data
 ```
 
 ## Input Files
@@ -79,7 +79,7 @@ The reconstructed SNV data are written to a file with name "rec-snv.txt".
 
 Parameter | Description | Possible values
 ---- | ----- | ------
---epochs | number of epoches to train scCNM | Ex: epochs=100  default:150
+--epochs | number of epoches to train scCMP | Ex: epochs=100  default:150
 --lr | learning rate | Ex: lr=0.0005  default:0.0001
 --latent_dim | latent dimension | Ex: latent_dim=30  default:50
 --w | the hyperparameter lambda | Ex: w=500  default:1000

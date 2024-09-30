@@ -368,10 +368,10 @@ class SelfAttention(nn.Module):
         return att_weights, att_emb
 
 
-# Define scCNM model
-class scCNM(nn.Module):
+# Define scCMP model
+class scCMP(nn.Module):
     def __init__(self, in_dim_cn, in_dim_snv, z_dim, n_channels=32):
-        super(scCNM, self).__init__()
+        super(scCMP, self).__init__()
         self.ae_cn = Autoencoder_CN(in_dim_cn, z_dim, n_channels)
         self.ae_snv = Autoencoder_SNV(in_dim_snv, z_dim)
         self.attlayer1 = SelfAttention(dropout=0.1)
